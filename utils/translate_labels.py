@@ -3,7 +3,6 @@ import os
 import cv2
 import numpy as np
 from tqdm import tqdm
-import pickle
 from collections import defaultdict
 
 colors = [[128, 64, 128],
@@ -43,10 +42,6 @@ print("Labeled Train Cities:")
 print(lbl_tr_cities)
 # Default Attributes for every image
 TRUTH_attr = 'UrbanAtlas'
-# --- Get Chips paths --- #
-lbl_chips_dir = f"{base_folder}/Chips_data/Labeled"
-labels_pkl = glob(f"{lbl_chips_dir}/*.pkl.gz")
-assert len(labels_pkl) > 0, f"Labels not found in {labels_pkl}"
 
 # --- Define dictionaries with datapaths --- #
 lbl_tr_paths = defaultdict(list)
