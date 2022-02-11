@@ -10,6 +10,7 @@ import torch.nn as nn
 from utils.loss import CrossEntropy2d
 from utils.loss import CrossEntropyLoss2dPixelWiseWeighted
 import math
+
 from utils import transformmasks
 from utils import transformsgpu
 
@@ -47,6 +48,7 @@ def entropy_loss(v, mask):
 
     return -torch.sum(loss_image) / (n * h * w * np.log2(c) * percentage_valid_points)
 
+
 def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=1000):
     iterator = iter(loader)
     for _ in range(iters):
@@ -67,6 +69,7 @@ def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=10
         # Create pseudolabels
         _, _ = model(norm_func(unlabeled_images, dataset), return_features=True)
     return model
+
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -380,6 +383,12 @@ def main():
             data_aug = Compose([RandomCrop_city_highres(input_size)])
         train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
                                     pretraining=pretraining)
+    elif dataset == 'minifrance':
+        data_loader = get_loader(dataset)
+        data_path = get_data_path(dataset)
+        train_dataset = data_loader(data_path, crop_size=input_size, scale=False, mirror=False, pretraining=pretraining)
+    else:
+        raise Exception(f'Dataset `{dataset}` not supported!')
 
     train_dataset_size = len(train_dataset)
     print('dataset size: ', train_dataset_size)
@@ -389,9 +398,9 @@ def main():
 
     # class weighting  taken unlabeled data into acount in an incremental fashion.
     class_weights_curr = ClassBalancing(labeled_iters=int(labeled_samples / batch_size_labeled),
-                                                  unlabeled_iters=int(
-                                                      (train_dataset_size - labeled_samples) / batch_size_unlabeled),
-                                                  n_classes=num_classes)
+                                        unlabeled_iters=int(
+                                            (train_dataset_size - labeled_samples) / batch_size_unlabeled),
+                                        n_classes=num_classes)
     # Memory Bank
     feature_memory = FeatureMemory(num_samples=labeled_samples, dataset=dataset, memory_per_class=256, feature_size=256,
                                    n_classes=num_classes)
@@ -488,7 +497,7 @@ def main():
 
         labeled_turn = i_iter % 2 == 0
 
-        if labeled_turn: # labeled data optimization
+        if labeled_turn:  # labeled data optimization
 
             ''' LABELED SAMPLES '''
             # Get batch
@@ -538,10 +547,12 @@ def main():
                 with torch.no_grad():
                     # Get feature vectors from labeled images with EMA model
                     if use_teacher:
-                        labeled_pred_ema, labeled_features_ema = ema_model(normalize(images_aug, dataset), return_features=True)
+                        labeled_pred_ema, labeled_features_ema = ema_model(normalize(images_aug, dataset),
+                                                                           return_features=True)
                     else:
                         model.eval()
-                        labeled_pred_ema, labeled_features_ema = model(normalize(images_aug, dataset), return_features=True)
+                        labeled_pred_ema, labeled_features_ema = model(normalize(images_aug, dataset),
+                                                                       return_features=True)
                         model.train()
                     labeled_pred_ema = interp(labeled_pred_ema)
                     probability_prediction_ema, label_prediction_ema = torch.max(torch.softmax(labeled_pred_ema, dim=1),
@@ -549,10 +560,12 @@ def main():
 
                 # Resize labels, predictions and probabilities,  to feature map resolution
                 labels_down = nn.functional.interpolate(labels_aug.float().unsqueeze(1),
-                                                        size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
+                                                        size=(
+                                                            labeled_features_ema.shape[2],
+                                                            labeled_features_ema.shape[3]),
                                                         mode='nearest').squeeze(1)
                 label_prediction_down = nn.functional.interpolate(label_prediction_ema.float().unsqueeze(1), size=(
-                labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
+                    labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
                                                                   mode='nearest').squeeze(1)
                 probability_prediction_down = nn.functional.interpolate(probability_prediction_ema.float().unsqueeze(1),
                                                                         size=(labeled_features_ema.shape[2],
@@ -561,7 +574,7 @@ def main():
 
                 # get mask where the labeled predictions are correct and have a confidence higher than 0.95
                 mask_prediction_correctly = ((label_prediction_down == labels_down).float() * (
-                            probability_prediction_down > 0.95).float()).bool()
+                        probability_prediction_down > 0.95).float()).bool()
 
                 # Apply the filter mask to the features and its labels
                 labeled_features_correct = labeled_features_ema.permute(0, 2, 3, 1)
@@ -604,7 +617,7 @@ def main():
                 loss = loss + loss_contr_labeled * 0.1
 
 
-        else: # unlabeled data optimization
+        else:  # unlabeled data optimization
 
             ''' UNLABELED SAMPLES '''
             try:
@@ -662,7 +675,6 @@ def main():
                                                                      return_features=True)
             pred_joined_unlabeled = interp(pred_joined_unlabeled)
 
-
             # apply clas balance for cityspcaes dataset
             if dataset == 'cityscapes':
                 class_weights = torch.from_numpy(
@@ -689,9 +701,7 @@ def main():
             valid_mask = (joined_pseudolabels != ignore_label).unsqueeze(1)
             loss = loss + entropy_loss(torch.nn.functional.softmax(pred_joined_unlabeled, dim=1), valid_mask) * 0.01
 
-
             if i_iter > RAMP_UP_ITERS:
-
                 '''
                 CONTRASTIVE LEARNING ON UNLABELED DATA. align unlabeled features to labeled features
                 '''
@@ -718,7 +728,6 @@ def main():
 
                 loss = loss + loss_contr_unlabeled * 0.1
 
-
         # common code
 
         loss_l_value += loss.item()
@@ -729,7 +738,6 @@ def main():
 
         m = 1 - (1 - 0.995) * (math.cos(math.pi * i_iter / num_iterations) + 1) / 2
         ema_model = update_ema_variables(ema_model=ema_model, model=model, alpha_teacher=m, iteration=i_iter)
-
 
         if i_iter % save_checkpoint_every == 0 and i_iter != 0:
             _save_checkpoint(i_iter, model, optimizer, config)
@@ -755,7 +763,7 @@ def main():
             '''
             if the performance has not improve in N iterations, try to reload best model to optimize again with a lower LR
             Simulating an iterative training'''
-            if iters_without_improve > num_iterations/5.:
+            if iters_without_improve > num_iterations / 5.:
                 print('Re-loading a previous best model')
                 checkpoint = torch.load(os.path.join(checkpoint_dir, f'best_model.pth'))
                 model.load_state_dict(checkpoint['model'])
@@ -764,7 +772,7 @@ def main():
                 ema_model = ema_model.cuda()
                 model.train()
                 model = model.cuda()
-                iters_without_improve = 0 # reset timer
+                iters_without_improve = 0  # reset timer
 
     _save_checkpoint(num_iterations, model, optimizer, config)
 
@@ -840,7 +848,7 @@ if __name__ == '__main__':
             split_id = None
 
     batch_size = config['training']['batch_size']
-    num_iterations = config['training']['num_iterations']  * 2
+    num_iterations = config['training']['num_iterations'] * 2
 
     input_size_string = config['training']['data']['input_size']
     h, w = map(int, input_size_string.split(','))
@@ -871,7 +879,7 @@ if __name__ == '__main__':
     save_best_model = True
 
     deeplabv2 = "2" in config['version']
-    use_teacher = True # by default
+    use_teacher = True  # by default
     if "use_teacher_train" in config['training']:
         use_teacher = config['training']['use_teacher_train']
     save_teacher = False  # by default

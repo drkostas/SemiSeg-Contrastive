@@ -1,6 +1,7 @@
 import json
 
 from data.cityscapes_loader import cityscapesLoader
+from data.minifrance_loader import minifranceLoader
 from data.voc_dataset import VOCDataSet
 
 def get_loader(name):
@@ -9,10 +10,11 @@ def get_loader(name):
     """
     return {
         "cityscapes": cityscapesLoader,
+        "minifrance": minifranceLoader,
         "pascal_voc": VOCDataSet
     }[name]
 
-def get_data_path(name):
+def get_data_path(name):  # TODO
     """get_data_path
     :param name:
     :param config_file:

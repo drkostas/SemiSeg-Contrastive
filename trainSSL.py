@@ -25,9 +25,11 @@ from utils.feature_memory import *
 start = timeit.default_timer()
 start_writeable = datetime.datetime.now().strftime('%m-%d_%H-%M')
 
+
 class Learning_Rate_Object(object):
     def __init__(self, learning_rate):
         self.learning_rate = learning_rate
+
 
 def entropy_loss(v, mask):
     """
@@ -42,10 +44,10 @@ def entropy_loss(v, mask):
     loss_image = torch.sum(loss_image, dim=1)
     loss_image = mask.float().squeeze(1) * loss_image
 
-
     percentage_valid_points = torch.mean(mask.float())
 
     return -torch.sum(loss_image) / (n * h * w * np.log2(c) * percentage_valid_points)
+
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -110,6 +112,7 @@ def sigmoid_ramp_up(iter, max_iter):
     else:
         return np.exp(- 5 * (1 - float(iter) / float(max_iter)) ** 2)
 
+
 def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=1000):
     iterator = iter(loader)
     model.train()
@@ -133,8 +136,8 @@ def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=10
     return model
 
 
-
-def augmentationTransform(parameters, data=None, target=None, probs=None, jitter_vale=0.4, min_sigma=0.2, max_sigma=2., ignore_label=255):
+def augmentationTransform(parameters, data=None, target=None, probs=None, jitter_vale=0.4, min_sigma=0.2, max_sigma=2.,
+                          ignore_label=255):
     """
 
     Args:
@@ -237,6 +240,7 @@ def create_ema_model(model, net_class):
 
     return ema_model
 
+
 def update_ema_variables(ema_model, model, alpha_teacher, iteration):
     """
 
@@ -250,13 +254,14 @@ def update_ema_variables(ema_model, model, alpha_teacher, iteration):
 
     """
     # Use the "true" average until the exponential average is more correct
-    alpha_teacher = min(1 - 1 / (iteration*10 + 1), alpha_teacher)
+    alpha_teacher = min(1 - 1 / (iteration * 10 + 1), alpha_teacher)
     for ema_param, param in zip(ema_model.parameters(), model.parameters()):
         ema_param.data[:] = alpha_teacher * ema_param[:].data[:] + (1 - alpha_teacher) * param[:].data[:]
 
     return ema_model
 
-def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label, weak = False):
+
+def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label, weak=False):
     """
     Perform data augmentation
 
@@ -301,7 +306,6 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
                 MixMask = torch.cat(
                     (MixMask, transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0).cuda()))
 
-
         params = {"Mix": MixMask}
     else:
         params = {}
@@ -345,6 +349,7 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
 
     return image_aug, labels_aug, probs_aug, params
 
+
 def main():
     print(config)
 
@@ -355,16 +360,16 @@ def main():
     random.seed(random_seed)
     torch.backends.cudnn.deterministic = True
 
-    if pretraining == 'COCO': # depending the pretraining, normalize with bgr or rgb
+    if pretraining == 'COCO':  # depending the pretraining, normalize with bgr or rgb
         from utils.transformsgpu import normalize_bgr as normalize
     else:
         from utils.transformsgpu import normalize_rgb as normalize
 
-    batch_size_unlabeled = int(batch_size / 2) # because of augmentation anchoring, 2 augmentations per sample
+    batch_size_unlabeled = int(batch_size / 2)  # because of augmentation anchoring, 2 augmentations per sample
     batch_size_labeled = int(batch_size * 1)
     assert batch_size_unlabeled >= 2, "batch size should be higher than 2"
     assert batch_size_labeled >= 2, "batch size should be higher than 2"
-    RAMP_UP_ITERS = 2000 # iterations until contrastive and self-training are taken into account
+    RAMP_UP_ITERS = 2000  # iterations until contrastive and self-training are taken into account
 
     # DATASETS / LOADERS
     if dataset == 'pascal_voc':
@@ -377,9 +382,10 @@ def main():
         data_path = get_data_path('cityscapes')
         if deeplabv2:
             data_aug = Compose([RandomCrop_city(input_size)])
-        else: # for deeplabv3 original resolution
+        else:  # for deeplabv3 original resolution
             data_aug = Compose([RandomCrop_city_highres(input_size)])
-        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size, pretraining=pretraining)
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+                                    pretraining=pretraining)
 
     train_dataset_size = len(train_dataset)
     print('dataset size: ', train_dataset_size)
@@ -389,11 +395,12 @@ def main():
 
     # class weighting  taken unlabeled data into acount in an incremental fashion.
     class_weights_curr = ClassBalancing(labeled_iters=int(labeled_samples / batch_size_labeled),
-                                                  unlabeled_iters=int(
-                                                      (train_dataset_size - labeled_samples) / batch_size_unlabeled),
-                                                  n_classes=num_classes)
+                                        unlabeled_iters=int(
+                                            (train_dataset_size - labeled_samples) / batch_size_unlabeled),
+                                        n_classes=num_classes)
     # Memory Bank
-    feature_memory = FeatureMemory(num_samples=labeled_samples, dataset=dataset, memory_per_class=256, feature_size=256, n_classes=num_classes)
+    feature_memory = FeatureMemory(num_samples=labeled_samples, dataset=dataset, memory_per_class=256, feature_size=256,
+                                   n_classes=num_classes)
 
     # select the partition
     if split_id is not None:
@@ -423,20 +430,23 @@ def main():
     ''' Deeplab model '''
     # Define network
     if deeplabv2:
-        if pretraining == 'COCO': # coco and imagenet resnet architectures differ a little, just on how to do the stride
+        if pretraining == 'COCO':  # coco and imagenet resnet architectures differ a little, just on how to do the stride
             from model.deeplabv2 import Res_Deeplab
-        else: # imagenet pretrained (more modern modification)
+        else:  # imagenet pretrained (more modern modification)
             from model.deeplabv2_imagenet import Res_Deeplab
 
         # load pretrained parameters
         if pretraining == 'COCO':
-            saved_state_dict = model_zoo.load_url('http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pth') # COCO pretraining
+            saved_state_dict = model_zoo.load_url(
+                'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pth')  # COCO pretraining
         else:
-            saved_state_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet101-5d3b4d8f.pth') # iamgenet pretrainning
+            saved_state_dict = model_zoo.load_url(
+                'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth')  # iamgenet pretrainning
 
     else:
         from model.deeplabv3 import Res_Deeplab50 as Res_Deeplab
-        saved_state_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet50-19c8e357.pth') # iamgenet pretrainning
+        saved_state_dict = model_zoo.load_url(
+            'https://download.pytorch.org/models/resnet50-19c8e357.pth')  # iamgenet pretrainning
 
     # create network
     model = Res_Deeplab(num_classes=num_classes)
@@ -448,12 +458,11 @@ def main():
             new_params[name].copy_(saved_state_dict[name])
     model.load_state_dict(new_params)
 
-
     # Optimizer for segmentation network
     learning_rate_object = Learning_Rate_Object(config['training']['learning_rate'])
 
     optimizer = torch.optim.SGD(model.optim_parameters(learning_rate_object),
-                          lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
+                                lr=learning_rate, momentum=momentum, weight_decay=weight_decay)
 
     ema_model = create_ema_model(model, Res_Deeplab)
     ema_model.train()
@@ -515,7 +524,8 @@ def main():
         # Create pseudolabels
         with torch.no_grad():
             if use_teacher:
-                logits_u_w, features_weak_unlabeled = ema_model(normalize(unlabeled_images, dataset), return_features=True)
+                logits_u_w, features_weak_unlabeled = ema_model(normalize(unlabeled_images, dataset),
+                                                                return_features=True)
             else:
                 model.eval()
                 logits_u_w, features_weak_unlabeled = model(normalize(unlabeled_images, dataset), return_features=True)
@@ -530,8 +540,8 @@ def main():
         if dataset == 'cityscapes':
             class_weights_curr.add_frequencies(labels.cpu().numpy(), pseudo_label.cpu().numpy())
 
-
-        images_aug, labels_aug, _, _ = augment_samples(images, labels, None, random.random()  < 0.2, batch_size_labeled, ignore_label, weak=True)
+        images_aug, labels_aug, _, _ = augment_samples(images, labels, None, random.random() < 0.2, batch_size_labeled,
+                                                       ignore_label, weak=True)
 
         '''
         UNLABELED DATA
@@ -542,7 +552,6 @@ def main():
                                                                                                   i_iter > RAMP_UP_ITERS and random.random() < 0.75,
                                                                                                   batch_size_unlabeled,
                                                                                                   ignore_label)
-
 
         unlabeled_images_aug2, pseudo_label2, max_probs2, unlabeled_aug2_params = augment_samples(unlabeled_images,
                                                                                                   pseudo_label,
@@ -555,7 +564,8 @@ def main():
         joined_pseudolabels = torch.cat((pseudo_label1, pseudo_label2), dim=0)
         joined_maxprobs = torch.cat((max_probs1, max_probs2), dim=0)
 
-        pred_joined_unlabeled, features_joined_unlabeled = model(normalize(joined_unlabeled, dataset), return_features=True)
+        pred_joined_unlabeled, features_joined_unlabeled = model(normalize(joined_unlabeled, dataset),
+                                                                 return_features=True)
         pred_joined_unlabeled = interp(pred_joined_unlabeled)
 
         # labeled data
@@ -575,7 +585,8 @@ def main():
         loss = loss + labeled_loss
 
         # SELF-SUPERVISED SEGMENTATION
-        unlabeled_loss = CrossEntropyLoss2dPixelWiseWeighted(ignore_index=ignore_label, weight=class_weights.float()).cuda() #
+        unlabeled_loss = CrossEntropyLoss2dPixelWiseWeighted(ignore_index=ignore_label,
+                                                             weight=class_weights.float()).cuda()  #
 
         # Pseudo-label weighting
         pixelWiseWeight = sigmoid_ramp_up(i_iter, RAMP_UP_ITERS) * torch.ones(joined_maxprobs.shape).cuda()
@@ -597,26 +608,32 @@ def main():
             with torch.no_grad():
                 # Get feature vectors from labeled images with EMA model
                 if use_teacher:
-                    labeled_pred_ema, labeled_features_ema = ema_model(normalize(images_aug, dataset), return_features=True)
+                    labeled_pred_ema, labeled_features_ema = ema_model(normalize(images_aug, dataset),
+                                                                       return_features=True)
                 else:
                     model.eval()
                     labeled_pred_ema, labeled_features_ema = model(normalize(images_aug, dataset), return_features=True)
                     model.train()
 
                 labeled_pred_ema = interp(labeled_pred_ema)
-                probability_prediction_ema, label_prediction_ema = torch.max(torch.softmax(labeled_pred_ema, dim=1),dim=1)  # Get pseudolabels
+                probability_prediction_ema, label_prediction_ema = torch.max(torch.softmax(labeled_pred_ema, dim=1),
+                                                                             dim=1)  # Get pseudolabels
 
             # Resize labels, predictions and probabilities,  to feature map resolution
-            labels_down = nn.functional.interpolate(labels_aug.float().unsqueeze(1), size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
+            labels_down = nn.functional.interpolate(labels_aug.float().unsqueeze(1),
+                                                    size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
                                                     mode='nearest').squeeze(1)
-            label_prediction_down = nn.functional.interpolate(label_prediction_ema.float().unsqueeze(1), size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
-                                                    mode='nearest').squeeze(1)
-            probability_prediction_down = nn.functional.interpolate(probability_prediction_ema.float().unsqueeze(1), size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
-                                                    mode='nearest').squeeze(1)
-
+            label_prediction_down = nn.functional.interpolate(label_prediction_ema.float().unsqueeze(1), size=(
+            labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
+                                                              mode='nearest').squeeze(1)
+            probability_prediction_down = nn.functional.interpolate(probability_prediction_ema.float().unsqueeze(1),
+                                                                    size=(labeled_features_ema.shape[2],
+                                                                          labeled_features_ema.shape[3]),
+                                                                    mode='nearest').squeeze(1)
 
             # get mask where the labeled predictions are correct and have a confidence higher than 0.95
-            mask_prediction_correctly = ((label_prediction_down == labels_down).float() * (probability_prediction_down > 0.95).float()).bool()
+            mask_prediction_correctly = ((label_prediction_down == labels_down).float() * (
+                        probability_prediction_down > 0.95).float()).bool()
 
             # Apply the filter mask to the features and its labels
             labeled_features_correct = labeled_features_ema.permute(0, 2, 3, 1)
@@ -632,9 +649,8 @@ def main():
                     proj_labeled_features_correct = model.projection_head(labeled_features_correct)
                     model.train()
             # updated memory bank
-            feature_memory.add_features_from_sample_learned(ema_model, proj_labeled_features_correct, labels_down_correct, batch_size_labeled)
-
-
+            feature_memory.add_features_from_sample_learned(ema_model, proj_labeled_features_correct,
+                                                            labels_down_correct, batch_size_labeled)
 
         if i_iter > RAMP_UP_ITERS:
             '''
@@ -652,18 +668,19 @@ def main():
             pred_labeled_features_all = model.prediction_head(proj_labeled_features_all)
 
             # Apply contrastive learning loss
-            loss_contr_labeled = contrastive_class_to_class_learned_memory(model, pred_labeled_features_all, labels_down_all,
-                                num_classes, feature_memory.memory)
+            loss_contr_labeled = contrastive_class_to_class_learned_memory(model, pred_labeled_features_all,
+                                                                           labels_down_all,
+                                                                           num_classes, feature_memory.memory)
 
             loss = loss + loss_contr_labeled * 0.1
-
 
             '''
             CONTRASTIVE LEARNING ON UNLABELED DATA. align unlabeled features to labeled features
             '''
             joined_pseudolabels_down = nn.functional.interpolate(joined_pseudolabels.float().unsqueeze(1),
-                                                    size=(features_joined_unlabeled.shape[2], features_joined_unlabeled.shape[3]),
-                                                    mode='nearest').squeeze(1)
+                                                                 size=(features_joined_unlabeled.shape[2],
+                                                                       features_joined_unlabeled.shape[3]),
+                                                                 mode='nearest').squeeze(1)
 
             # mask features that do not have ignore label in the labels (zero-padding because of data augmentation like resize/crop)
             mask = (joined_pseudolabels_down != ignore_label)
@@ -677,11 +694,11 @@ def main():
             pred_feat_unlabeled = model.prediction_head(proj_feat_unlabeled)
 
             # Apply contrastive learning loss
-            loss_contr_unlabeled = contrastive_class_to_class_learned_memory(model, pred_feat_unlabeled, joined_pseudolabels_down,
-                                num_classes, feature_memory.memory)
+            loss_contr_unlabeled = contrastive_class_to_class_learned_memory(model, pred_feat_unlabeled,
+                                                                             joined_pseudolabels_down,
+                                                                             num_classes, feature_memory.memory)
 
             loss = loss + loss_contr_unlabeled * 0.1
-
 
         loss_l_value += loss.item()
 
@@ -691,7 +708,6 @@ def main():
 
         m = 1 - (1 - 0.995) * (math.cos(math.pi * i_iter / num_iterations) + 1) / 2
         ema_model = update_ema_variables(ema_model=ema_model, model=model, alpha_teacher=m, iteration=i_iter)
-
 
         if i_iter % save_checkpoint_every == 0 and i_iter != 0:
             if save_teacher:
@@ -703,7 +719,8 @@ def main():
             print('iter = {0:6d}/{1:6d}'.format(i_iter, num_iterations))
 
             model.eval()
-            mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir, pretraining=pretraining)
+            mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label,
+                                       save_dir=checkpoint_dir, pretraining=pretraining)
             model.train()
 
             if mIoU > best_mIoU:
@@ -719,7 +736,7 @@ def main():
             '''
             if the performance has not improve in N iterations, try to reload best model to optimize again with a lower LR
             Simulating an iterative training'''
-            if iters_without_improve > num_iterations/5.:
+            if iters_without_improve > num_iterations / 5.:
                 print('Re-loading a previous best model')
                 checkpoint = torch.load(os.path.join(checkpoint_dir, f'best_model.pth'))
                 model.load_state_dict(checkpoint['model'])
@@ -728,13 +745,14 @@ def main():
                 ema_model = ema_model.cuda()
                 model.train()
                 model = model.cuda()
-                iters_without_improve = 0 # reset timer
+                iters_without_improve = 0  # reset timer
 
     _save_checkpoint(num_iterations, model, optimizer, config)
 
     # FINISH TRAINING, evaluate again
     model.eval()
-    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,pretraining=pretraining)
+    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,
+                               pretraining=pretraining)
     model.train()
 
     if mIoU > best_mIoU and save_best_model:
@@ -750,7 +768,8 @@ def main():
 
     model = update_BN_weak_unlabeled_data(model, normalize, batch_size_unlabeled, trainloader_remain)
     model.eval()
-    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir, pretraining=pretraining)
+    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,
+                               pretraining=pretraining)
     if mIoU > best_mIoU and save_best_model:
         best_mIoU = mIoU
         _save_checkpoint(i_iter, model, optimizer, config, save_best=True)
@@ -833,7 +852,7 @@ if __name__ == '__main__':
 
     deeplabv2 = "2" in config['version']
 
-    use_teacher = True # by default
+    use_teacher = True  # by default
     if 'use_teacher_train' in config['training']:
         use_teacher = config['training']['use_teacher_train']
 
