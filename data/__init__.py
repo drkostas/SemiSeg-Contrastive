@@ -10,11 +10,11 @@ def get_loader(name):
     """
     return {
         "cityscapes": cityscapesLoader,
-        "minifrance": minifranceLoader,
+        "minifrance_lbl": minifranceLoader,
         "pascal_voc": VOCDataSet
     }[name]
 
-def get_data_path(name):  # TODO
+def get_data_path(name):
     """get_data_path
     :param name:
     :param config_file:
@@ -24,5 +24,9 @@ def get_data_path(name):  # TODO
 
     if name == 'gta5':
         return '../data/GTA5/'
+
     if name == 'pascal_voc':
         return '../data/VOC2012/'
+
+    if name == 'minifrance_lbl':
+        return '../../Raw_data/labeled_train/'
