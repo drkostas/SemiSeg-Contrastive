@@ -31,10 +31,10 @@ colors = [[128, 64, 128],
 
 # --- Define folder structure --- #
 # Set the folder paths
-base_folder = '/data/datasets/DFC2022'
-lbl_tr_dir = f'{base_folder}/Raw_data/labeled_train'
-unlbl_tr_dir = f'{base_folder}/Raw_data/unlabeled_train'
-lbl_val_dir = f'{base_folder}/Raw_data/val'
+base_folder = '/data/datasets/DFC2022/Raw_data'
+lbl_tr_dir = f'{base_folder}/labeled_train'
+unlbl_tr_dir = f'{base_folder}/unlabeled_train'
+lbl_val_dir = f'{base_folder}/val'
 # --- Get the city names --- #
 lbl_tr_cities = os.listdir(lbl_tr_dir)
 # Print the city names
@@ -66,7 +66,7 @@ for city, paths in lbl_tr_paths.items():
             class_i_image = class_i_image1 & class_i_image2 & class_i_image3
 
             results[class_i_image] = i
-        img_path = img_path.replace('Raw_data', 'Data_translated_labels')
+        img_path = img_path.replace(f'{TRUTH_attr}', f'{TRUTH_attr}_translated')
         img_folder = f'{os.sep}'.join((img_path.split(os.sep)[:-1]))
 
         os.makedirs(img_folder, exist_ok=True)
