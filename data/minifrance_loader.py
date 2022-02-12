@@ -73,8 +73,8 @@ class minifranceLoader(data.Dataset):
         )
         self.files = {}
         self.images_base = os.path.join(self.root, city, "BDORTHO")
-        # self.annotations_base = os.path.join(self.root, city, "UrbanAtlas")
-        self.annotations_base = os.path.join(self.root, city, "UrbanAtlas_translated")
+        # self.annotations_base = os.path.join(self.root, city, "UrbanAtlas_transformed")
+        self.annotations_base = os.path.join(self.root, city, "UrbanAtlas")
 
         self.files[split] = recursive_glob(rootdir=self.images_base, suffix=".tif")
         self.void_classes = [0]
@@ -118,8 +118,14 @@ class minifranceLoader(data.Dataset):
         """__getitem__
         :param index:
         """
-        img_path = self.files[self.split][index].rstrip()
-        lbl_path = img_path.replace('images', 'labels')
+        try:
+            img_path = self.files[self.split][index].rstrip()
+            lbl_path = img_path.replace('BDORTHO', 'UrbanAtlas')\
+                               .replace('.tif', '_UA2012.tif')
+        except Exception as e:
+            print("Index: ", index)
+            print("Len files: ", len(self.files[self.split]))
+            raise e
 
         try:
             img = m.imread(img_path)
@@ -127,11 +133,17 @@ class minifranceLoader(data.Dataset):
 
             lbl = m.imread(lbl_path)
             lbl = np.array(lbl, dtype=np.uint8)
-
-            if self.augmentations is not None:
-                img, lbl = self.augmentations(img, lbl)
-            if self.is_transform:
-                img, lbl = self.transform(img, lbl)
+            try:
+                if self.augmentations is not None:
+                    img, lbl = self.augmentations(img, lbl)
+                if self.is_transform:
+                    img, lbl = self.transform(img, lbl)
+            except Exception as e:
+                print("Img Path: ", img_path)
+                print("Lbl Path: ", lbl_path)
+                print("img: ", img.shape)
+                print("lbl: ", lbl.shape)
+                raise e
 
             img_name = img_path.split('/')[-1]
             if self.return_id:
@@ -141,7 +153,6 @@ class minifranceLoader(data.Dataset):
             print(img_path)
             self.files[self.split].pop(index)
             return self.__getitem__(index - 1)
-
 
     def transform(self, img, lbl):
         """transform
