@@ -1,8 +1,8 @@
 {
   "model": "DeepLab",
   "version": "3",
-  "dataset": "minifrance",
-
+  "dataset": "minifrance_lbl",
+  "city": "Nice",
   "training": {
     "batch_size": 5,
     "num_workers": 3,
@@ -14,7 +14,6 @@
     "pretraining": "COCO",
     "lr_schedule_power": 0.9,
     "weight_decay": 5e-4,
-
     "data": {
       "split_id_list": 0,
       "labeled_samples": 100,
@@ -23,7 +22,6 @@
   },
   "seed": 5555,
   "ignore_label": 250,
-
   "utils": {
     "save_checkpoint_every": 200000,
     "checkpoint_dir": "/data/datasets/DFC2022/checkpoints/Deeplabv3",

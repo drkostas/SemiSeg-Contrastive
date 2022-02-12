@@ -1,7 +1,7 @@
-'''
+"""
 Code taken from https://github.com/WilhelmT/ClassMix
 Slightly modified
-'''
+"""
 
 import os
 import torch
@@ -9,6 +9,7 @@ import scipy.misc as m
 from torch.utils import data
 from data.city_utils import recursive_glob
 from data.augmentations import *
+
 
 class minifranceLoader(data.Dataset):
     """minifranceLoader
@@ -42,15 +43,16 @@ class minifranceLoader(data.Dataset):
     label_colours = dict(zip(range(19), colors))
 
     def __init__(
-        self,
-        root,
-        split="train",
-        is_transform=False,
-        img_size=(512, 1024),
-        img_norm=False,
-        augmentations=None,
-        return_id=False,
-        pretraining='COCO',
+            self,
+            root,
+            split="train",
+            is_transform=False,
+            img_size=(512, 1024),
+            img_norm=False,
+            augmentations=None,
+            return_id=False,
+            pretraining='COCO',
+            city='Nice'
     ):
         """__init__
         :param root:
@@ -70,14 +72,11 @@ class minifranceLoader(data.Dataset):
             img_size if isinstance(img_size, tuple) else (img_size, img_size)
         )
         self.files = {}
+        self.images_base = os.path.join(self.root, city, "BDORTHO")
+        # self.annotations_base = os.path.join(self.root, city, "UrbanAtlas")
+        self.annotations_base = os.path.join(self.root, city, "UrbanAtlas_translated")
 
-        self.images_base = os.path.join(self.root, "leftImg8bit_trainvaltest","leftImg8bit", self.split)  # TODO
-
-        self.annotations_base = os.path.join(
-            self.root, "gtFine_trainvaltest", "gtFine", self.split  # TODO
-        )
-
-        self.files[split] = recursive_glob(rootdir=self.images_base, suffix=".tiff")
+        self.files[split] = recursive_glob(rootdir=self.images_base, suffix=".tif")
         self.void_classes = [0]
         self.valid_classes = [1, 2, 3, 4, 5, 6, 9, 10, 14]
         self.class_names = [
@@ -120,31 +119,29 @@ class minifranceLoader(data.Dataset):
         :param index:
         """
         img_path = self.files[self.split][index].rstrip()
-        lbl_path = os.path.join(
-            self.annotations_base,
-            img_path.split(os.sep)[-2], # temporary for cross validation
-            os.path.basename(img_path)[:-15] + "gtFine_labelIds.png",  # TODO
-        )
+        lbl_path = img_path.replace('images', 'labels')
+
         try:
             img = m.imread(img_path)
             img = np.array(img, dtype=np.uint8)
+
+            lbl = m.imread(lbl_path)
+            lbl = np.array(lbl, dtype=np.uint8)
+
+            if self.augmentations is not None:
+                img, lbl = self.augmentations(img, lbl)
+            if self.is_transform:
+                img, lbl = self.transform(img, lbl)
+
+            img_name = img_path.split('/')[-1]
+            if self.return_id:
+                return img, lbl, img_name, img_name, index
+            return img, lbl, img_path, lbl_path, img_name
         except:
             print(img_path)
+            self.files[self.split].pop(index)
+            return self.__getitem__(index - 1)
 
-        lbl = m.imread(lbl_path)
-        lbl = np.array(lbl, dtype=np.uint8)
-        lbl = self.encode_segmap(lbl)
-
-
-        if self.augmentations is not None:
-            img, lbl = self.augmentations(img, lbl)
-        if self.is_transform:
-            img, lbl = self.transform(img, lbl)
-
-        img_name = img_path.split('/')[-1]
-        if self.return_id:
-            return img, lbl, img_name, img_name, index
-        return img, lbl, img_path, lbl_path, img_name
 
     def transform(self, img, lbl):
         """transform

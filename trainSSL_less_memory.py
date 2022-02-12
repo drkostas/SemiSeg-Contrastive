@@ -383,10 +383,15 @@ def main():
             data_aug = Compose([RandomCrop_city_highres(input_size)])
         train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
                                     pretraining=pretraining)
-    elif dataset == 'minifrance':
+    elif dataset == 'minifrance_lbl':  # TODO: add minifrance dataset
         data_loader = get_loader(dataset)
         data_path = get_data_path(dataset)
-        train_dataset = data_loader(data_path, crop_size=input_size, scale=False, mirror=False, pretraining=pretraining)
+        if deeplabv2:
+            data_aug = Compose([RandomCrop_city(input_size)])
+        else:  # for deeplabv3 original resolution
+            data_aug = Compose([RandomCrop_city_highres(input_size)])
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+                                    pretraining=pretraining, city=city)
     else:
         raise Exception(f'Dataset `{dataset}` not supported!')
 
@@ -429,7 +434,7 @@ def main():
 
     # supervised loss
     supervised_loss = CrossEntropy2d(ignore_label=ignore_label).cuda()
-
+    return
     ''' Deeplab model '''
     # Define network
     if deeplabv2:
@@ -803,7 +808,7 @@ def main():
         _save_checkpoint(i_iter, model, optimizer, config, save_best=True)
 
     print('BEST MIOU')
-    print(max(best_mIoU_improved, best_mIoU))
+    print(max(mIoU, best_mIoU))
 
     end = timeit.default_timer()
     print('Total time: ' + str(end - start) + ' seconds')
@@ -846,6 +851,11 @@ if __name__ == '__main__':
             split_id = './splits/voc/split_2.pkl'
         else:
             split_id = None
+
+    elif dataset == 'minifrance_lbl':  # TODO: add minifrance dataset
+        num_classes = 14
+        city = config['city']
+        split_id = None
 
     batch_size = config['training']['batch_size']
     num_iterations = config['training']['num_iterations'] * 2
