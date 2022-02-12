@@ -352,7 +352,6 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
 
 def main():
     print(config)
-
     cudnn.enabled = True
     torch.manual_seed(random_seed)
     torch.cuda.manual_seed(random_seed)
@@ -386,6 +385,17 @@ def main():
             data_aug = Compose([RandomCrop_city_highres(input_size)])
         train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
                                     pretraining=pretraining)
+    elif dataset == 'minifrance_lbl':
+        data_loader = get_loader(dataset)
+        data_path = get_data_path(dataset)
+        if deeplabv2:
+            data_aug = Compose([RandomCrop_city(input_size)])
+        else:  # for deeplabv3 original resolution
+            data_aug = Compose([RandomCrop_city_highres(input_size)])
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+                                    pretraining=pretraining, city=city)
+    else:
+        raise Exception(f'Dataset `{dataset}` not supported!')
 
     train_dataset_size = len(train_dataset)
     print('dataset size: ', train_dataset_size)
@@ -624,7 +634,7 @@ def main():
                                                     size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
                                                     mode='nearest').squeeze(1)
             label_prediction_down = nn.functional.interpolate(label_prediction_ema.float().unsqueeze(1), size=(
-            labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
+                labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
                                                               mode='nearest').squeeze(1)
             probability_prediction_down = nn.functional.interpolate(probability_prediction_ema.float().unsqueeze(1),
                                                                     size=(labeled_features_ema.shape[2],
@@ -633,7 +643,7 @@ def main():
 
             # get mask where the labeled predictions are correct and have a confidence higher than 0.95
             mask_prediction_correctly = ((label_prediction_down == labels_down).float() * (
-                        probability_prediction_down > 0.95).float()).bool()
+                    probability_prediction_down > 0.95).float()).bool()
 
             # Apply the filter mask to the features and its labels
             labeled_features_correct = labeled_features_ema.permute(0, 2, 3, 1)
@@ -775,7 +785,7 @@ def main():
         _save_checkpoint(i_iter, model, optimizer, config, save_best=True)
 
     print('BEST MIOU')
-    print(best_mIoU)
+    print(max(mIoU, best_mIoU))
 
     end = timeit.default_timer()
     print('Total time: ' + str(end - start) + ' seconds')
@@ -818,6 +828,10 @@ if __name__ == '__main__':
             split_id = './splits/voc/split_2.pkl'
         else:
             split_id = None
+    elif dataset == 'minifrance_lbl':
+        num_classes = 14
+        city = config['city']
+        split_id = None
 
     batch_size = config['training']['batch_size']
     num_iterations = config['training']['num_iterations']

@@ -383,7 +383,7 @@ def main():
             data_aug = Compose([RandomCrop_city_highres(input_size)])
         train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
                                     pretraining=pretraining)
-    elif dataset == 'minifrance_lbl':  # TODO: add minifrance dataset
+    elif dataset == 'minifrance_lbl':
         data_loader = get_loader(dataset)
         data_path = get_data_path(dataset)
         if deeplabv2:
@@ -434,7 +434,7 @@ def main():
 
     # supervised loss
     supervised_loss = CrossEntropy2d(ignore_label=ignore_label).cuda()
-    return
+
     ''' Deeplab model '''
     # Define network
     if deeplabv2:
@@ -852,7 +852,7 @@ if __name__ == '__main__':
         else:
             split_id = None
 
-    elif dataset == 'minifrance_lbl':  # TODO: add minifrance dataset
+    elif dataset == 'minifrance_lbl':
         num_classes = 14
         city = config['city']
         split_id = None
