@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 import numpy as np
 
+
 class CrossEntropy2d(nn.Module):
 
     def __init__(self, ignore_label=255):
@@ -28,19 +29,26 @@ class CrossEntropy2d(nn.Module):
             return Variable(torch.zeros(1))
         predict = predict.transpose(1, 2).transpose(2, 3).contiguous()
         predict = predict[target_mask.view(n, h, w, 1).repeat(1, 1, 1, c)].view(-1, c)
-        loss = F.cross_entropy(predict, target, weight=weight, reduction='mean')
+        try:
+            loss = F.cross_entropy(predict, target, weight=weight, reduction='mean')
+        except Exception as e:
+            print("Prediction size: ", predict.size())
+            print("Target size: ", target.size())
+            print("Weight size: ", weight.size())
+            raise e
         return loss
 
 
 class CrossEntropyLoss2dPixelWiseWeighted(nn.Module):
     def __init__(self, weight=None, ignore_index=250, reduction='none'):
         super(CrossEntropyLoss2dPixelWiseWeighted, self).__init__()
-        self.CE =  nn.CrossEntropyLoss(weight=weight, ignore_index=ignore_index, reduction=reduction)
+        self.CE = nn.CrossEntropyLoss(weight=weight, ignore_index=ignore_index, reduction=reduction)
 
     def forward(self, output, target, pixelWiseWeight):
         loss = self.CE(output, target)
         loss = torch.mean(loss * pixelWiseWeight)
         return loss
+
 
 class MSELoss2d(nn.Module):
     def __init__(self, size_average=None, reduce=None, reduction='mean', ignore_index=255):
@@ -51,16 +59,18 @@ class MSELoss2d(nn.Module):
         loss = self.MSE(torch.softmax(output, dim=1), target)
         return loss
 
+
 def customsoftmax(inp, multihotmask):
     """
     Custom Softmax
     """
-    soft = torch.softmax(inp,dim=1)
+    soft = torch.softmax(inp, dim=1)
     # This takes the mask * softmax ( sums it up hence summing up the classes in border
     # then takes of summed up version vs no summed version
     return torch.log(
         torch.max(soft, (multihotmask * (soft * multihotmask).sum(1, keepdim=True)))
     )
+
 
 class ImgWtLossSoftNLL(nn.Module):
     """
@@ -77,7 +87,6 @@ class ImgWtLossSoftNLL(nn.Module):
         self.norm = norm
         self.batch_weights = False
         self.fp16 = False
-
 
     def calculate_weights(self, target):
         """
@@ -97,7 +106,7 @@ class ImgWtLossSoftNLL(nn.Module):
         """
         NLL Relaxed Loss Implementation
         """
-        #if (cfg.REDUCE_BORDER_EPOCH != -1 and cfg.EPOCH > cfg.REDUCE_BORDER_EPOCH):
+        # if (cfg.REDUCE_BORDER_EPOCH != -1 and cfg.EPOCH > cfg.REDUCE_BORDER_EPOCH):
         #    border_weights = 1 / border_weights
         #    target[target > 1] = 1
         if self.fp16:

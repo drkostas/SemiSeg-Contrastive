@@ -259,7 +259,7 @@ def update_ema_variables(ema_model, model, alpha_teacher, iteration):
     return ema_model
 
 
-def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label, weak=False):
+def augment_samples(images, labels: torch.Tensor, probs, do_classmix, batch_size, ignore_label, weak=False):
     """
     Perform data augmentation
 
@@ -279,11 +279,13 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
 
     if do_classmix:
         # ClassMix: Get mask for image A
+        print(f"Labels ({len(labels)}): {labels.shape}")
         for image_i in range(batch_size):  # for each image
             classes = torch.unique(labels[image_i])  # get unique classes in pseudolabel A
             nclasses = classes.shape[0]
 
             # remove ignore class
+            print(f"Classes of image {image_i}: ", len(classes), classes)
             if ignore_label in classes and len(classes) > 1 and nclasses > 1:
                 classes = classes[classes != ignore_label]
                 nclasses = nclasses - 1
@@ -321,6 +323,8 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
         params["RandomScaleCrop"] = scale
 
         # Apply strong augmentations to unlabeled images
+        print("Images: ", type(images), images.shape)
+        print("Labels: ", type(labels), labels.shape)
         image_aug, labels_aug, probs_aug = augmentationTransform(params,
                                                                  data=images, target=labels,
                                                                  probs=probs, jitter_vale=0.125,
@@ -386,11 +390,7 @@ def main():
     elif dataset == 'minifrance_lbl':
         data_loader = get_loader(dataset)
         data_path = get_data_path(dataset)
-        if deeplabv2:
-            data_aug = Compose([RandomCrop_city(input_size)])
-        else:  # for deeplabv3 original resolution
-            data_aug = Compose([RandomCrop_city_highres(input_size)])
-        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=None, img_size=input_size,
                                     pretraining=pretraining, city=city)
     else:
         raise Exception(f'Dataset `{dataset}` not supported!')
@@ -401,7 +401,7 @@ def main():
     partial_size = labeled_samples
     print('Training on number of samples:', partial_size)
 
-    # class weighting  taken unlabeled data into acount in an incremental fashion.
+    # class weighting  taken unlabeled data into account in an incremental fashion.
     class_weights_curr = ClassBalancing(labeled_iters=int(labeled_samples / batch_size_labeled),
                                         unlabeled_iters=int(
                                             (train_dataset_size - labeled_samples) / batch_size_unlabeled),
@@ -522,7 +522,7 @@ def main():
 
             model.train()
 
-            if dataset == 'cityscapes':
+            if dataset == 'cityscapes':# or dataset == 'minifrance_lbl':
                 class_weights_curr.add_frequencies_labeled(labels.cpu().numpy())
 
             images_aug, labels_aug, _, _ = augment_samples(images, labels, None, random.random() < 0.2,
@@ -734,8 +734,12 @@ def main():
                 loss = loss + loss_contr_unlabeled * 0.1
 
         # common code
-
-        loss_l_value += loss.item()
+        try:
+            loss_l_value += loss.item()
+        except Exception as e:
+            print("Loss value: ", type(loss_l_value), loss_l_value)
+            print("Loss: ", type(loss), loss)
+            print("Loss Item: ", type(loss.item()), loss.item())
 
         # optimize
         loss.backward()

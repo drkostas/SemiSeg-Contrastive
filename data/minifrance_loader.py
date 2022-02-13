@@ -67,18 +67,19 @@ class minifranceLoader(data.Dataset):
         self.is_transform = is_transform
         self.augmentations = augmentations
         self.img_norm = img_norm
-        self.n_classes = 14
+        self.n_classes = 15
         self.img_size = (
             img_size if isinstance(img_size, tuple) else (img_size, img_size)
         )
         self.files = {}
         self.images_base = os.path.join(self.root, city, "BDORTHO")
-        # self.annotations_base = os.path.join(self.root, city, "UrbanAtlas_transformed")
-        self.annotations_base = os.path.join(self.root, city, "UrbanAtlas")
+        self.annotations_dir = "UrbanAtlas"
+        # self.annotations_dir = "UrbanAtlas_translated"
+        self.annotations_base = os.path.join(self.root, city, self.annotations_dir)
 
         self.files[split] = recursive_glob(rootdir=self.images_base, suffix=".tif")
         self.void_classes = [0]
-        self.valid_classes = [1, 2, 3, 4, 5, 6, 9, 10, 14]
+        self.valid_classes = [1, 2, 3, 4, 5, 6, 9, 10, 14, 15]
         self.class_names = [
             "unlabelled",
             "urban_fabric",
@@ -120,7 +121,7 @@ class minifranceLoader(data.Dataset):
         """
         try:
             img_path = self.files[self.split][index].rstrip()
-            lbl_path = img_path.replace('BDORTHO', 'UrbanAtlas')\
+            lbl_path = img_path.replace('BDORTHO', self.annotations_dir)\
                                .replace('.tif', '_UA2012.tif')
         except Exception as e:
             print("Index: ", index)
@@ -130,9 +131,16 @@ class minifranceLoader(data.Dataset):
         try:
             img = m.imread(img_path)
             img = np.array(img, dtype=np.uint8)
-
+            if img.shape[0] == 2001:
+                img = np.delete(img, 0, axis=0)
+            if img.shape[1] == 2001:
+                img = np.delete(img, 0, axis=1)
             lbl = m.imread(lbl_path)
             lbl = np.array(lbl, dtype=np.uint8)
+            if lbl.shape[0] == 2001:
+                lbl = np.delete(lbl, 0, axis=0)
+            if lbl.shape[1] == 2001:
+                lbl = np.delete(lbl, 0, axis=1)
             try:
                 if self.augmentations is not None:
                     img, lbl = self.augmentations(img, lbl)

@@ -21,7 +21,7 @@
     }
   },
   "seed": 5555,
-  "ignore_label": 250,
+  "ignore_label": -1,
   "utils": {
     "save_checkpoint_every": 200000,
     "checkpoint_dir": "/data/datasets/DFC2022/checkpoints/Deeplabv3",
