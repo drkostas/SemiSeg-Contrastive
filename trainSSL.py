@@ -388,11 +388,7 @@ def main():
     elif dataset == 'minifrance_lbl':
         data_loader = get_loader(dataset)
         data_path = get_data_path(dataset)
-        if deeplabv2:
-            data_aug = Compose([RandomCrop_city(input_size)])
-        else:  # for deeplabv3 original resolution
-            data_aug = Compose([RandomCrop_city_highres(input_size)])
-        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=None, img_size=input_size,
                                     pretraining=pretraining, city=city)
     else:
         raise Exception(f'Dataset `{dataset}` not supported!')
@@ -552,7 +548,10 @@ def main():
 
         images_aug, labels_aug, _, _ = augment_samples(images, labels, None, random.random() < 0.2, batch_size_labeled,
                                                        ignore_label, weak=True)
-
+        print(f"unlabeled_images: {unlabeled_images.shape}")
+        print(f"pseudo_label: {pseudo_label.shape}")
+        print(f"max_probs: {max_probs.shape}")
+        print(f"batch_size_unlabeled: {batch_size_unlabeled}")
         '''
         UNLABELED DATA
         '''
@@ -571,6 +570,8 @@ def main():
                                                                                                   ignore_label)
         # concatenate two augmentations of unlabeled data
         joined_unlabeled = torch.cat((unlabeled_images_aug1, unlabeled_images_aug2), dim=0)
+        print(f"Pseudo Label 1: {pseudo_label1.shape}")
+        print(f"Pseudo Label 2: {pseudo_label2.shape}")
         joined_pseudolabels = torch.cat((pseudo_label1, pseudo_label2), dim=0)
         joined_maxprobs = torch.cat((max_probs1, max_probs2), dim=0)
 

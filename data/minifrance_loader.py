@@ -79,7 +79,7 @@ class minifranceLoader(data.Dataset):
 
         self.files[split] = recursive_glob(rootdir=self.images_base, suffix=".tif")
         self.void_classes = [0]
-        self.valid_classes = [1, 2, 3, 4, 5, 6, 9, 10, 14, 15]
+        self.valid_classes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
         self.class_names = [
             "unlabelled",
             "urban_fabric",
