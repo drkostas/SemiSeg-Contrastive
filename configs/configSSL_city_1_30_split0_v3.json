@@ -19,11 +19,9 @@
       "labeled_samples": 100,
       "input_size": "512,512"
     }
-
   },
   "seed": 5555,
   "ignore_label": 250,
-
   "utils": {
     "save_checkpoint_every": 200000,
     "checkpoint_dir": "../saved/DeepLab",

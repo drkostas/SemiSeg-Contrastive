@@ -96,11 +96,11 @@ class minifranceLoader(data.Dataset):
             "open_spaces_with_little_or_no_vegetation",
             "wetlands",
             "water",
-            "clouds_and_shadows",
+            "clouds_and_shadows"  # 16
         ]
 
         self.ignore_index = 250
-        self.class_map = dict(zip(self.valid_classes, range(19)))
+        self.class_map = dict(zip(self.valid_classes, range(15)))
 
         if not self.files[split]:
             raise Exception(
@@ -121,8 +121,8 @@ class minifranceLoader(data.Dataset):
         """
         try:
             img_path = self.files[self.split][index].rstrip()
-            lbl_path = img_path.replace('BDORTHO', self.annotations_dir)\
-                               .replace('.tif', '_UA2012.tif')
+            lbl_path = img_path.replace('BDORTHO', self.annotations_dir) \
+                .replace('.tif', '_UA2012.tif')
         except Exception as e:
             print("Index: ", index)
             print("Len files: ", len(self.files[self.split]))
@@ -131,16 +131,12 @@ class minifranceLoader(data.Dataset):
         try:
             img = m.imread(img_path)
             img = np.array(img, dtype=np.uint8)
-            if img.shape[0] == 2001:
-                img = np.delete(img, 0, axis=0)
-            if img.shape[1] == 2001:
-                img = np.delete(img, 0, axis=1)
+            img = self.random_crop(img, crop_hw=(256, 256))
             lbl = m.imread(lbl_path)
             lbl = np.array(lbl, dtype=np.uint8)
-            if lbl.shape[0] == 2001:
-                lbl = np.delete(lbl, 0, axis=0)
-            if lbl.shape[1] == 2001:
-                lbl = np.delete(lbl, 0, axis=1)
+            lbl = self.random_crop(lbl, crop_hw=(256, 256))
+            # print("Max Label: ", lbl.max())
+            # print("Min Label: ", lbl.min())
             try:
                 if self.augmentations is not None:
                     img, lbl = self.augmentations(img, lbl)
@@ -198,3 +194,19 @@ class minifranceLoader(data.Dataset):
         for _validc in self.valid_classes:
             mask[mask == _validc] = self.class_map[_validc]
         return mask
+
+    @staticmethod
+    def random_crop(image: np.ndarray, crop_hw=(256, 256)):
+        """
+        Crop image randomly
+        """
+        crop_h, crop_w = crop_hw
+        if (crop_h < image.shape[0] and crop_w < image.shape[1]):
+            x = np.random.randint(0, image.shape[0] - crop_h)  # row
+            y = np.random.randint(0, image.shape[1] - crop_w)  # column
+            # label maybe multi-channel[H,W,C] or one-channel [H,W]
+            return image[x:x + crop_h, y:y + crop_w]
+        elif (crop_h == image.shape[0] and crop_w == image.shape[1]):
+            return image
+        else:
+            raise Exception('Crop size > image.shape')
