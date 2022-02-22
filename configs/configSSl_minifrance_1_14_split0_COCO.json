@@ -17,6 +17,7 @@
     "data": {
       "split_id_list": 0,
       "labeled_samples": 100,
+      "num_classes": 16,
       "input_size": "256,256"
     }
   },

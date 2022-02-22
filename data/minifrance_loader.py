@@ -99,8 +99,8 @@ class minifranceLoader(data.Dataset):
             "clouds_and_shadows"  # 16
         ]
 
-        self.ignore_index = 250
-        self.class_map = dict(zip(self.valid_classes, range(15)))
+        self.ignore_index = -1
+        self.class_map = dict(zip(self.valid_classes, range(len(self.valid_classes))))
 
         if not self.files[split]:
             raise Exception(
