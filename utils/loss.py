@@ -32,6 +32,7 @@ class CrossEntropy2d(nn.Module):
         try:
             loss = F.cross_entropy(predict, target, weight=weight, reduction='mean')
         except Exception as e:
+            print("------- loss.py forward() Error -------")
             print("Prediction size: ", predict.size())
             print("Target size: ", target.size())
             print("Weight size: ", weight.size())

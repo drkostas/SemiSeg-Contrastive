@@ -47,7 +47,7 @@ class minifranceLoader(data.Dataset):
             root,
             split="train",
             is_transform=False,
-            img_size=(512, 1024),
+            img_size=(256, 256),
             img_norm=False,
             augmentations=None,
             return_id=False,
@@ -67,7 +67,7 @@ class minifranceLoader(data.Dataset):
         self.is_transform = is_transform
         self.augmentations = augmentations
         self.img_norm = img_norm
-        self.n_classes = 15
+        self.n_classes = 16
         self.img_size = (
             img_size if isinstance(img_size, tuple) else (img_size, img_size)
         )

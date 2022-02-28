@@ -22,11 +22,11 @@
     }
   },
   "seed": 5555,
-  "ignore_label": -1,
+  "ignore_label": 250,
   "utils": {
     "save_checkpoint_every": 200000,
     "checkpoint_dir": "/data/datasets/DFC2022/checkpoints/Deeplabv3",
-    "val_per_iter": 1000,
+    "val_per_iter": 1,
     "save_best_model": true
   }
 }
