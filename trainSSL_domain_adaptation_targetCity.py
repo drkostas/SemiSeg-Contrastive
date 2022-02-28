@@ -6,32 +6,31 @@ import pickle
 from contrastive_losses import *
 import torch.backends.cudnn as cudnn
 from torch.utils import data, model_zoo
-import math
-
+import torch.nn as nn
 from utils.loss import CrossEntropy2d
 from utils.loss import CrossEntropyLoss2dPixelWiseWeighted
+import math
 
 from utils import transformmasks
 from utils import transformsgpu
 
-
-import torch.nn as nn
 from data import get_loader, get_data_path
 from data.augmentations import *
 
 import json
 from evaluateSSL import evaluate
-import time
 from utils.class_balancing import ClassBalancing
 from utils.feature_memory import *
 
 start = timeit.default_timer()
 start_writeable = datetime.datetime.now().strftime('%m-%d_%H-%M')
+device = torch.device("cpu")
 
 
 class Learning_Rate_Object(object):
     def __init__(self, learning_rate):
         self.learning_rate = learning_rate
+
 
 def entropy_loss(v, mask):
     """
@@ -46,10 +45,10 @@ def entropy_loss(v, mask):
     loss_image = torch.sum(loss_image, dim=1)
     loss_image = mask.float() * loss_image
 
-
     percentage_valid_points = torch.mean(mask.float())
 
     return -torch.sum(loss_image) / (n * h * w * np.log2(c) * percentage_valid_points)
+
 
 def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=1000):
     iterator = iter(loader)
@@ -66,11 +65,12 @@ def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=10
 
         # Unlabeled
         unlabeled_images, _, _, _, _ = batch
-        unlabeled_images = unlabeled_images.cuda()
+        unlabeled_images = unlabeled_images  # .cuda()
 
         # Create pseudolabels
         _, _ = model(norm_func(unlabeled_images, dataset), return_features=True)
     return model
+
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -136,7 +136,8 @@ def sigmoid_ramp_up(iter, max_iter):
         return np.exp(- 5 * (1 - float(iter) / float(max_iter)) ** 2)
 
 
-def augmentationTransform(parameters, data=None, target=None, probs=None, jitter_vale=0.4, min_sigma=0.2, max_sigma=2., ignore_label=255):
+def augmentationTransform(parameters, data=None, target=None, probs=None, jitter_vale=0.4, min_sigma=0.2, max_sigma=2.,
+                          ignore_label=255):
     """
 
     Args:
@@ -202,17 +203,17 @@ def _save_checkpoint(iteration, model, optimizer, config, save_best=False, overw
     checkpoint['model'] = model.state_dict()
 
     if save_best:
-        filename = os.path.join(checkpoint_dir, f'best_model.pth')
+        filename = os.path.join(checkpoint_dir_dom_adapt, f'best_model.pth')
         torch.save(checkpoint, filename)
         print(f'\nSaving a checkpoint: {filename} ...')
         print("Saving current best model: best_model.pth")
     else:
-        filename = os.path.join(checkpoint_dir, f'checkpoint-iter{iteration}.pth')
+        filename = os.path.join(checkpoint_dir_dom_adapt, f'checkpoint-iter{iteration}.pth')
         print(f'\nSaving a checkpoint: {filename} ...')
         torch.save(checkpoint, filename)
         if overwrite:
             try:
-                os.remove(os.path.join(checkpoint_dir, f'checkpoint-iter{iteration - save_checkpoint_every}.pth'))
+                os.remove(os.path.join(checkpoint_dir_dom_adapt, f'checkpoint-iter{iteration - save_checkpoint_every}.pth'))
             except:
                 pass
 
@@ -239,6 +240,7 @@ def create_ema_model(model, net_class):
 
     return ema_model
 
+
 def update_ema_variables(ema_model, model, alpha_teacher, iteration):
     """
 
@@ -255,9 +257,11 @@ def update_ema_variables(ema_model, model, alpha_teacher, iteration):
     alpha_teacher = min(1 - 1 / (iteration + 1), alpha_teacher)
     for ema_param, param in zip(ema_model.parameters(), model.parameters()):
         ema_param.data[:] = alpha_teacher * ema_param[:].data[:] + (1 - alpha_teacher) * param[:].data[:]
+
     return ema_model
 
-def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label, weak = False):
+
+def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label, weak=False):
     """
     Perform data augmentation
 
@@ -293,15 +297,14 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
 
             # pick half of the classes randomly
             classes = (classes[torch.Tensor(
-                np.random.choice(nclasses, int(((nclasses - nclasses % 2) / 2) + 1), replace=False)).long()]).cuda()
+                np.random.choice(nclasses, int(((nclasses - nclasses % 2) / 2) + 1), replace=False)).long()])  # .cuda()
 
             # acumulate masks
             if image_i == 0:
-                MixMask = transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0).cuda()
+                MixMask = transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0)  # .cuda()
             else:
                 MixMask = torch.cat(
-                    (MixMask, transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0).cuda()))
-
+                    (MixMask, transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0)))  # .cuda()))
 
         params = {"Mix": MixMask}
     else:
@@ -346,8 +349,8 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
 
     return image_aug, labels_aug, probs_aug, params
 
+
 def main():
-    print(config)
     cudnn.enabled = True
     torch.manual_seed(random_seed)
     torch.cuda.manual_seed(random_seed)
@@ -361,21 +364,48 @@ def main():
         from utils.transformsgpu import normalize_rgb as normalize
 
     batch_size_unlabeled = int(batch_size / 2)
-    batch_size_labeled = int(batch_size * 1 )
+    batch_size_labeled = int(batch_size * 1)
 
     RAMP_UP_ITERS = 2000
 
-    data_loader = get_loader('cityscapes')
-    data_path = get_data_path('cityscapes')
-    data_aug = Compose(
-        [RandomCrop_city(input_size)])  # from 1024x2048 to resize 512x1024 to crop input_size (512x512)
-    train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size, pretraining=pretraining)
+    if dataset == 'cityscapes':
+        data_loader = get_loader('cityscapes')
+        data_path = get_data_path('cityscapes')
+        data_aug = Compose(
+            [RandomCrop_city(input_size)])  # from 1024x2048 to resize 512x1024 to crop input_size (512x512)
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+                                    pretraining=pretraining)
+    elif dataset == 'minifrance_lbl':
+        data_loader = get_loader(dataset)
+        data_path = get_data_path(dataset)
+        # if deeplabv2:
+        #     data_aug = Compose([RandomCrop_city(input_size)])
+        # else:  # for deeplabv3 original resolution
+        #     data_aug = Compose([RandomCrop_city_highres(input_size)])
+        data_aug = None
+        train_dataset = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+                                    pretraining=pretraining, city=city)
+    else:
+        raise Exception(f'Dataset `{dataset}` not supported!')
 
-    from data.gta5_loader import gtaLoader
-    data_loader_gta = gtaLoader
-    data_path_gta = get_data_path('gta5')
-    data_aug_gta = Compose([RandomCrop_city(input_size)])  # from 1024x2048 to resize 512x1024 to crop input_size (512x512)
-    train_dataset_gta = data_loader_gta(data_path_gta, is_transform=True, augmentations=data_aug_gta, img_size=input_size, pretraining=pretraining)
+    if dataset_dom_adapt == 'minifrance_lbl':
+        data_loader = get_loader(dataset)
+        data_path = get_data_path(dataset)
+        # if deeplabv2:
+        #     data_aug = Compose([RandomCrop_city(input_size)])
+        # else:  # for deeplabv3 original resolution
+        #     data_aug = Compose([RandomCrop_city_highres(input_size)])
+        data_aug = None
+        train_dataset_dom_adapt = data_loader(data_path, is_transform=True, augmentations=data_aug, img_size=input_size,
+                                pretraining=pretraining, city=city_dom_adapt)
+    else:
+        from data.gta5_loader import gtaLoader
+        data_loader_gta = gtaLoader
+        data_path_gta = get_data_path('gta5')
+        data_aug_gta = Compose(
+            [RandomCrop_city(input_size)])  # from 1024x2048 to resize 512x1024 to crop input_size (512x512)
+        train_dataset_dom_adapt = data_loader_gta(data_path_gta, is_transform=True, augmentations=data_aug_gta,
+                                            img_size=input_size, pretraining=pretraining)
 
     train_dataset_size = len(train_dataset)
     print('dataset size: ', train_dataset_size)
@@ -383,13 +413,14 @@ def main():
     partial_size = labeled_samples
     print('Training on number of samples:', partial_size)
 
+    # class weighting  taken unlabeled data into acount in an incremental fashion.
     class_weights_curr = ClassBalancing(labeled_iters=int(labeled_samples / batch_size_labeled),
-                                                  unlabeled_iters=int(
-                                                      (train_dataset_size - labeled_samples) / batch_size_unlabeled),
-                                                  n_classes=num_classes)
-
-    feature_memory = FeatureMemory(num_samples=labeled_samples, dataset=dataset, memory_per_class=256,
-                                   feature_size=256, n_classes=num_classes)
+                                        unlabeled_iters=int(
+                                            (train_dataset_size - labeled_samples) / batch_size_unlabeled),
+                                        n_classes=num_classes)
+    # Memory Bank
+    feature_memory = FeatureMemory(num_samples=labeled_samples, dataset=dataset, memory_per_class=256, feature_size=256,
+                                   n_classes=num_classes)
 
     # select the partition
     if split_id is not None:
@@ -399,21 +430,21 @@ def main():
         train_ids = np.arange(train_dataset_size)
         np.random.shuffle(train_ids)
 
+    # Samplers for labeled data
     train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
     trainloader = data.DataLoader(train_dataset,
                                   batch_size=batch_size_labeled, sampler=train_sampler, num_workers=num_workers,
                                   pin_memory=True)
     trainloader_iter = iter(trainloader)
 
-    # GTA5
-    train_ids_gta = np.arange(len(train_dataset_gta))
-    np.random.shuffle(train_ids_gta)
-    train_sampler_gta = data.sampler.SubsetRandomSampler(train_ids_gta)
-    trainloader_gta = data.DataLoader(train_dataset_gta,
-                                  batch_size=batch_size_labeled, sampler=train_sampler_gta, num_workers=num_workers,
-                                  pin_memory=True)
-    trainloader_iter_gta = iter(trainloader_gta)
-
+    # Domain Adaptation Dataset
+    train_ids_dom_adapt = np.arange(len(train_dataset_dom_adapt))
+    np.random.shuffle(train_ids_dom_adapt)
+    train_sampler_dom_adapt = data.sampler.SubsetRandomSampler(train_ids_dom_adapt)
+    trainloader_dom_adapt = data.DataLoader(train_dataset_dom_adapt,
+                                      batch_size=batch_size_labeled, sampler=train_sampler_dom_adapt, num_workers=num_workers,
+                                      pin_memory=True)
+    trainloader_iter_dom_adapt = iter(trainloader_dom_adapt)
 
     train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
     trainloader_remain = data.DataLoader(train_dataset,
@@ -422,15 +453,14 @@ def main():
     trainloader_remain_iter = iter(trainloader_remain)
 
     # LOSSES
-    unlabeled_loss = CrossEntropyLoss2dPixelWiseWeighted().cuda()
-    supervised_loss = CrossEntropy2d(ignore_label=ignore_label).cuda()
+    supervised_loss = CrossEntropy2d(ignore_label=ignore_label)  # .cuda()
 
     ''' Deeplab model '''
     # Define network
     if deeplabv2:
-        if pretraining == 'COCO': # coco and iamgenet resnet architectures differ a little, just on how to do the stride
+        if pretraining == 'COCO':  # coco and imagenet resnet architectures differ a little, just on how to do the stride
             from model.deeplabv2 import Res_Deeplab
-        else: # imagenet pretrained (more modern modification)
+        else:  # imagenet pretrained (more modern modification)
             from model.deeplabv2_imagenet import Res_Deeplab
 
     else:
@@ -441,16 +471,17 @@ def main():
 
     # load pretrained parameters
     if pretraining == 'COCO':
-        saved_state_dict = model_zoo.load_url('http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pth') # COCO pretraining
+        saved_state_dict = model_zoo.load_url(
+            'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pth')  # COCO pretraining
     else:
-        saved_state_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet101-5d3b4d8f.pth') # iamgenet pretrainning
+        saved_state_dict = model_zoo.load_url(
+            'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth')  # iamgenet pretrainning
 
     # Copy loaded parameters to model
     new_params = model.state_dict().copy()
     for name, param in new_params.items():
         if name in saved_state_dict and param.size() == saved_state_dict[name].size():
             new_params[name].copy_(saved_state_dict[name])
-
     model.load_state_dict(new_params)
 
     # Optimizer for segmentation network
@@ -461,19 +492,19 @@ def main():
 
     ema_model = create_ema_model(model, Res_Deeplab)
     ema_model.train()
-    ema_model = ema_model.cuda()
+    ema_model = ema_model  # .cuda()
     model.train()
-    model = model.cuda()
+    model = model  # .cuda()
     cudnn.benchmark = True
 
     # checkpoint = torch.load('/home/snowflake/Escritorio/Semi-Sup/saved/Deep_cont/best_model.pth')
     # model.load_state_dict(checkpoint['model'])
 
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
-    with open(checkpoint_dir + '/config.json', 'w') as handle:
+    if not os.path.exists(checkpoint_dir_dom_adapt):
+        os.makedirs(checkpoint_dir_dom_adapt)
+    with open(checkpoint_dir_dom_adapt + '/config.json', 'w') as handle:
         json.dump(config, handle, indent=4, sort_keys=False)
-    pickle.dump(train_ids, open(os.path.join(checkpoint_dir, 'train_split.pkl'), 'wb'))
+    pickle.dump(train_ids, open(os.path.join(checkpoint_dir_dom_adapt, 'train_split.pkl'), 'wb'))
 
     interp = nn.Upsample(size=(input_size[0], input_size[1]), mode='bilinear', align_corners=True)
 
@@ -483,10 +514,11 @@ def main():
     iters_without_improve = 0
 
     # TRAINING
+    print("num_iterations: ", num_iterations)
+    print("----------------------------------------------------------------------------")
     for i_iter in range(start_iteration, num_iterations):
         model.train()  # set mode to training
         optimizer.zero_grad()
-        a = time.time()
 
         loss_l_value = 0.
         adjust_learning_rate(optimizer, i_iter)
@@ -494,7 +526,6 @@ def main():
         ''' LABELED SAMPLES '''
         # Get batch
         is_cityscapes = i_iter % 2 == 0
-        is_gta = not is_cityscapes
         if num_iterations - i_iter > 100:
             # Last 100 itereations only citysacpes data
             is_cityscapes = True
@@ -511,27 +542,25 @@ def main():
                 batch = next(trainloader_iter)
         else:
             try:
-                batch = next(trainloader_iter_gta)
+                batch = next(trainloader_iter_dom_adapt)
                 if batch[0].shape[0] != batch_size_labeled:
-                    train_ids_gta = np.arange(len(train_dataset_gta))
-                    np.random.shuffle(train_ids_gta)
-                    train_sampler_gta = data.sampler.SubsetRandomSampler(train_ids_gta)
-                    trainloader_gta = data.DataLoader(train_dataset_gta,
-                                                      batch_size=batch_size_labeled, sampler=train_sampler_gta,
+                    train_ids_dom_adapt = np.arange(len(train_dataset_dom_adapt))
+                    np.random.shuffle(train_ids_dom_adapt)
+                    train_sampler_dom_adapt = data.sampler.SubsetRandomSampler(train_ids_dom_adapt)
+                    trainloader_dom_adapt = data.DataLoader(train_dataset_dom_adapt,
+                                                      batch_size=batch_size_labeled, sampler=train_sampler_dom_adapt,
                                                       num_workers=num_workers,
                                                       pin_memory=True)
-                    trainloader_iter_gta = iter(trainloader_gta)
-                    batch = next(trainloader_iter_gta)
+                    trainloader_iter_dom_adapt = iter(trainloader_dom_adapt)
+                    batch = next(trainloader_iter_dom_adapt)
             except:  # finish epoch, rebuild the iterator
                 # print('Epochs since start: ',epochs_since_start)
-                trainloader_iter_gta = iter(trainloader_gta)
-                batch = next(trainloader_iter_gta)
-
+                trainloader_iter_dom_adapt = iter(trainloader_dom_adapt)
+                batch = next(trainloader_iter_dom_adapt)
 
         images, labels, _, _, _ = batch
-        images = images.cuda()
-        labels = labels.cuda()
-
+        images = images  # .cuda()
+        labels = labels  # .cuda()
 
         ''' UNLABELED SAMPLES '''
         try:
@@ -544,12 +573,13 @@ def main():
 
         # Unlabeled
         unlabeled_images, _, _, _, _ = batch_remain
-        unlabeled_images = unlabeled_images.cuda()
+        unlabeled_images = unlabeled_images  # .cuda()
 
         # Create pseudolabels
         with torch.no_grad():
             if use_teacher:
-                logits_u_w, features_weak_unlabeled = ema_model(normalize(unlabeled_images, dataset), return_features=True)
+                logits_u_w, features_weak_unlabeled = ema_model(normalize(unlabeled_images, dataset),
+                                                                return_features=True)
             else:
                 model.eval()
                 logits_u_w, features_weak_unlabeled = model(normalize(unlabeled_images, dataset), return_features=True)
@@ -560,10 +590,10 @@ def main():
         model.train()
 
         if is_cityscapes:
-                class_weights_curr.add_frequencies(labels.cpu().numpy(), pseudo_label.cpu().numpy())
+            class_weights_curr.add_frequencies(labels.cpu().numpy(), pseudo_label.cpu().numpy())
 
         images2, labels2, _, _ = augment_samples(images, labels, None, random.random() < 0.25, batch_size_labeled,
-                                                      ignore_label, weak=True)
+                                                 ignore_label, weak=True)
 
         '''
         UNLABELED DATA
@@ -590,7 +620,7 @@ def main():
                                                                                                   do_classmix,
                                                                                                   batch_size_unlabeled,
                                                                                                   ignore_label)
-
+        # concatenate two augmentations of unlabeled data
         joined_unlabeled = torch.cat((unlabeled_images_aug1, unlabeled_images_aug2), dim=0)
         joined_pseudolabels = torch.cat((pseudo_label1, pseudo_label2), dim=0)
         joined_maxprobs = torch.cat((max_probs1, max_probs2), dim=0)
@@ -604,12 +634,14 @@ def main():
         labeled_pred, labeled_features = model(normalize(joined_labeled, dataset), return_features=True)
         labeled_pred = interp(labeled_pred)
 
-        class_weights = torch.from_numpy(np.ones((num_classes))).cuda()
-        if i_iter > RAMP_UP_ITERS:
+        # apply class balance for cityspcaes dataset
+        class_weights = torch.from_numpy(np.ones((num_classes)))  # .cuda()
+        if i_iter > RAMP_UP_ITERS and dataset == 'cityscapes':
             class_weights = torch.from_numpy(
-                class_weights_curr.get_weights(num_iterations, only_labeled=False)).cuda()
+                class_weights_curr.get_weights(num_iterations, only_labeled=False))  # .cuda()
 
         loss = 0
+
         # SUPERVISED SEGMENTATION
         labeled_loss = supervised_loss(labeled_pred, joined_labels, weight=class_weights.float())  #
         loss = loss + labeled_loss
@@ -620,10 +652,10 @@ def main():
         '''
 
         unlabeled_loss = CrossEntropyLoss2dPixelWiseWeighted(ignore_index=ignore_label,
-                                                                 weight=class_weights.float()).cuda()  #
+                                                             weight=class_weights.float())  # .cuda()  #
 
         # Pseudo-label weighting
-        pixelWiseWeight = sigmoid_ramp_up(i_iter, RAMP_UP_ITERS) * torch.ones(joined_maxprobs.shape).cuda()
+        pixelWiseWeight = sigmoid_ramp_up(i_iter, RAMP_UP_ITERS) * torch.ones(joined_maxprobs.shape) # .cuda()
         pixelWiseWeight = pixelWiseWeight * torch.pow(joined_maxprobs.detach(), 6)
 
         # Pseudo-label loss
@@ -641,25 +673,31 @@ def main():
                 # Build Memory Bank 1000 iters before starting to do contrsative
                 with torch.no_grad():
                     if use_teacher:
-                        labeled_pred_ema, labeled_features_ema = ema_model(normalize(joined_labeled, dataset), return_features=True)
+                        labeled_pred_ema, labeled_features_ema = ema_model(normalize(joined_labeled, dataset),
+                                                                           return_features=True)
                     else:
                         model.eval()
-                        labeled_pred_ema, labeled_features_ema = model(normalize(joined_labeled, dataset), return_features=True)
+                        labeled_pred_ema, labeled_features_ema = model(normalize(joined_labeled, dataset),
+                                                                       return_features=True)
                         model.train()
 
                     labeled_pred_ema = interp(labeled_pred_ema)
-                    probability_prediction_ema, label_prediction_ema = torch.max(torch.softmax(labeled_pred_ema, dim=1), dim=1)  # Get pseudolabels
-
+                    probability_prediction_ema, label_prediction_ema = torch.max(torch.softmax(labeled_pred_ema, dim=1),
+                                                                                 dim=1)  # Get pseudolabels
 
                 labels_down = nn.functional.interpolate(joined_labels.float().unsqueeze(1),
-                                                        size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
+                                                        size=(
+                                                            labeled_features_ema.shape[2],
+                                                            labeled_features_ema.shape[3]),
                                                         mode='nearest').squeeze(1)
                 label_prediction_down = nn.functional.interpolate(label_prediction_ema.float().unsqueeze(1),
-                                                        size=(labeled_features_ema.shape[2], labeled_features_ema.shape[3]),
-                                                        mode='nearest').squeeze(1)
+                                                                  size=(labeled_features_ema.shape[2],
+                                                                        labeled_features_ema.shape[3]),
+                                                                  mode='nearest').squeeze(1)
                 probability_prediction_down = nn.functional.interpolate(probability_prediction_ema.float().unsqueeze(1),
-                                                        size=(labeled_features_ema.shape[2],  labeled_features_ema.shape[3]),
-                                                        mode='nearest').squeeze(1)
+                                                                        size=(labeled_features_ema.shape[2],
+                                                                              labeled_features_ema.shape[3]),
+                                                                        mode='nearest').squeeze(1)
 
                 # get mask where the labeled predictions are correct
                 mask_prediction_correctly = ((label_prediction_down == labels_down).float() *
@@ -682,7 +720,6 @@ def main():
                 feature_memory.add_features_from_sample_learned(ema_model, proj_labeled_features_correct,
                                                                 labels_down_correct, batch_size_labeled)
 
-
         if i_iter > RAMP_UP_ITERS:
             '''
             LABELED TO LABELED. Force features from laeled samples, to be similar to other features from the same class (which also leads to good predictions)
@@ -696,22 +733,24 @@ def main():
             labels_down_all = labels_down[mask_prediction_correctly]
             labeled_features_all = labeled_features_all[mask_prediction_correctly, ...]
 
-            # get prediction features
+            # get predicted features
             proj_labeled_features_all = model.projection_head(labeled_features_all)
             pred_labeled_features_all = model.prediction_head(proj_labeled_features_all)
 
+            # Apply contrastive learning loss
             loss_contr_labeled = contrastive_class_to_class_learned_memory(model, pred_labeled_features_all,
-                                                                labels_down_all, num_classes, feature_memory.memory)
+                                                                           labels_down_all,
+                                                                           num_classes, feature_memory.memory)
 
             loss = loss + loss_contr_labeled * 0.2
 
             '''
             CONTRASTIVE LEARNING ON UNLABELED DATA. align unlabeled features to labeled features
             '''
-
             joined_pseudolabels_down = nn.functional.interpolate(joined_pseudolabels.float().unsqueeze(1),
-                                                size=(features_joined_unlabeled.shape[2], features_joined_unlabeled.shape[3]),
-                                                mode='nearest').squeeze(1)
+                                                                 size=(features_joined_unlabeled.shape[2],
+                                                                       features_joined_unlabeled.shape[3]),
+                                                                 mode='nearest').squeeze(1)
 
             # take out the features from black pixels from zooms out and augmetnations (ignore labels on pseduoalebl)
             mask = (joined_pseudolabels_down != ignore_label)
@@ -724,12 +763,12 @@ def main():
             proj_feat_unlabeled = model.projection_head(features_joined_unlabeled)
             pred_feat_unlabeled = model.prediction_head(proj_feat_unlabeled)
 
+            # Apply contrastive learning loss
             loss_contr_unlabeled = contrastive_class_to_class_learned_memory(model, pred_feat_unlabeled,
-                                                joined_pseudolabels_down, num_classes, feature_memory.memory)
+                                                                             joined_pseudolabels_down,
+                                                                             num_classes, feature_memory.memory)
 
             loss = loss + loss_contr_unlabeled * 0.2
-
-
 
         loss_l_value += loss.item()
 
@@ -740,9 +779,6 @@ def main():
         m = 1 - (1 - 0.995) * (math.cos(math.pi * i_iter / num_iterations) + 1) / 2
         ema_model = update_ema_variables(ema_model=ema_model, model=model, alpha_teacher=m, iteration=i_iter)
 
-
-        # print('iter = {0:6d}/{1:6d}, loss_l = {2:.3f}'.format(i_iter, num_iterations, loss_l_value))
-
         if i_iter % save_checkpoint_every == 0 and i_iter != 0:
             _save_checkpoint(i_iter, model, optimizer, config)
 
@@ -750,9 +786,10 @@ def main():
             print('iter = {0:6d}/{1:6d}'.format(i_iter, num_iterations))
 
             model.eval()
-            mIoU, eval_loss = evaluate(model, dataset, ignore_label=ignore_label, save_dir=checkpoint_dir, pretraining=pretraining)
+            mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label,
+                                       save_dir=checkpoint_dir_dom_adapt, pretraining=pretraining,
+                                       city=city, num_classes=num_classes)
             model.train()
-
 
             if mIoU > best_mIoU:
                 best_mIoU = mIoU
@@ -767,24 +804,24 @@ def main():
             '''
             if the performance has not improve in N iterations, try to reload best model to optimize again with a lower LR
             Simulating an iterative training'''
-            if iters_without_improve > num_iterations/5.:
+            if iters_without_improve > num_iterations / 5.:
                 print('Re-loading a previous best model')
-                checkpoint = torch.load(os.path.join(checkpoint_dir, f'best_model.pth'))
+                checkpoint = torch.load(os.path.join(checkpoint_dir_dom_adapt, f'best_model.pth'))
                 model.load_state_dict(checkpoint['model'])
                 ema_model = create_ema_model(model, Res_Deeplab)
                 ema_model.train()
-                ema_model = ema_model.cuda()
+                ema_model = ema_model  # .cuda()
                 model.train()
-                model = model.cuda()
-                iters_without_improve = 0 # reset timer
-
+                model = model  # .cuda()
+                iters_without_improve = 0  # reset timer
 
     _save_checkpoint(num_iterations, model, optimizer, config)
 
     # FINISH TRAINING, evaluate again
     model.eval()
-    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,
-                               pretraining=pretraining)
+    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label,
+                               save_dir=checkpoint_dir_dom_adapt, pretraining=pretraining,
+                               city=city, num_classes=num_classes)
     model.train()
 
     if mIoU > best_mIoU and save_best_model:
@@ -794,29 +831,29 @@ def main():
     # TRY IMPROVING BEST MODEL WITH EMA MODEL OR UPDATING BN STATS
 
     # Load best model
-    checkpoint = torch.load(os.path.join(checkpoint_dir, f'best_model.pth'))
+    checkpoint = torch.load(os.path.join(checkpoint_dir_dom_adapt, f'best_model.pth'))
     model.load_state_dict(checkpoint['model'])
-    model = model.cuda()
+    model = model  # .cuda()
 
     model = update_BN_weak_unlabeled_data(model, normalize, batch_size_unlabeled, trainloader_remain)
     model.eval()
-    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,
-                               pretraining=pretraining)
-    model.train()
+    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label,
+                               save_dir=checkpoint_dir_dom_adapt, pretraining=pretraining,
+                               city=city, num_classes=num_classes)
     if mIoU > best_mIoU and save_best_model:
         best_mIoU = mIoU
         _save_checkpoint(i_iter, model, optimizer, config, save_best=True)
 
     print('BEST MIOU')
-    print(max(best_mIoU_improved, best_mIoU))
+    print(max(mIoU, best_mIoU))
 
     end = timeit.default_timer()
     print('Total time: ' + str(end - start) + ' seconds')
 
 
 if __name__ == '__main__':
-
-    print('---------------------------------Starting---------------------------------')
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    print('--------------------------------- Starting ---------------------------------')
 
     args = get_arguments()
 
@@ -828,15 +865,40 @@ if __name__ == '__main__':
     model = config['model']
     dataset = config['dataset']
 
-    num_classes = 19
-    if config['training']['data']['split_id_list'] == 0:
-        split_id = './splits/city/split_0.pkl'
-    elif config['training']['data']['split_id_list'] == 1:
-        split_id = './splits/city/split_1.pkl'
-    elif config['training']['data']['split_id_list'] == 2:
-        split_id = './splits/city/split_2.pkl'
-    else:
+    if dataset == 'cityscapes':
+        num_classes = 19
+        if config['training']['data']['split_id_list'] == 0:
+            split_id = './splits/city/split_0.pkl'
+        elif config['training']['data']['split_id_list'] == 1:
+            split_id = './splits/city/split_1.pkl'
+        elif config['training']['data']['split_id_list'] == 2:
+            split_id = './splits/city/split_2.pkl'
+        else:
+            split_id = None
+
+    elif dataset == 'pascal_voc':
+        num_classes = 21
+        data_dir = './data/voc_dataset/'
+        data_list_path = './data/voc_list/train_aug.txt'
+        if config['training']['data']['split_id_list'] == 0:
+            split_id = './splits/voc/split_0.pkl'
+        elif config['training']['data']['split_id_list'] == 1:
+            split_id = './splits/voc/split_1.pkl'
+        elif config['training']['data']['split_id_list'] == 2:
+            split_id = './splits/voc/split_2.pkl'
+        else:
+            split_id = None
+    elif dataset == 'minifrance_lbl':
+        num_classes = config['training']['data']['num_classes']
+        city = config['city']
         split_id = None
+    else:
+        raise Exception(f'Dataset `{dataset}` not supported!')
+
+
+    if 'dataset_dom_adapt' in config:
+        dataset_dom_adapt = config['dataset_dom_adapt']
+        city_dom_adapt = config['city_dom_adapt']
 
     batch_size = config['training']['batch_size']
     num_iterations = config['training']['num_iterations']
@@ -856,24 +918,25 @@ if __name__ == '__main__':
     num_workers = config['training']['num_workers']
     random_seed = config['seed']
     pretraining = config['training']['pretraining']
-
     labeled_samples = config['training']['data']['labeled_samples']
 
     save_checkpoint_every = config['utils']['save_checkpoint_every']
     if args.resume:
-        checkpoint_dir = os.path.join(*args.resume.split('/')[:-1]) + '_resume-'
+        checkpoint_dir_dom_adapt = os.path.join(*args.resume.split('/')[:-1]) + '_resume-'
     else:
-        checkpoint_dir = os.path.join(config['utils']['checkpoint_dir'])
-    log_dir = checkpoint_dir
+        checkpoint_dir_dom_adapt = os.path.join(config['utils']['checkpoint_dir_dom_adapt'])
+    log_dir = checkpoint_dir_dom_adapt
 
     val_per_iter = config['utils']['val_per_iter']
 
     save_best_model = True
 
     deeplabv2 = "2" in config['version']
-    use_teacher = True # by default
-    if "use_teacher_train" in config['training']:
+
+    use_teacher = True  # by default
+    if 'use_teacher_train' in config['training']:
         use_teacher = config['training']['use_teacher_train']
+
     save_teacher = False  # by default
     if 'save_teacher_test' in config['training']:
         save_teacher = config['training']['save_teacher_test']
