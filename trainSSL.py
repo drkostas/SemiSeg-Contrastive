@@ -129,7 +129,7 @@ def update_BN_weak_unlabeled_data(model, norm_func, batch_size, loader, iters=10
 
         # Unlabeled
         unlabeled_images, _, _, _, _ = batch
-        unlabeled_images = unlabeled_images#.cuda()
+        unlabeled_images = unlabeled_images  # .cuda()
 
         # Create pseudolabels
         _, _ = model(norm_func(unlabeled_images, dataset), return_features=True)
@@ -298,14 +298,14 @@ def augment_samples(images, labels, probs, do_classmix, batch_size, ignore_label
 
             # pick half of the classes randomly
             classes = (classes[torch.Tensor(
-                np.random.choice(nclasses, int(((nclasses - nclasses % 2) / 2) + 1), replace=False)).long()])#.cuda()
+                np.random.choice(nclasses, int(((nclasses - nclasses % 2) / 2) + 1), replace=False)).long()])  # .cuda()
 
             # acumulate masks
             if image_i == 0:
-                MixMask = transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0)#.cuda()
+                MixMask = transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0)  # .cuda()
             else:
                 MixMask = torch.cat(
-                    (MixMask, transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0)))#.cuda()))
+                    (MixMask, transformmasks.generate_class_mask(labels[image_i], classes).unsqueeze(0)))  # .cuda()))
 
         params = {"Mix": MixMask}
     else:
@@ -436,7 +436,7 @@ def main():
     trainloader_remain_iter = iter(trainloader_remain)
 
     # supervised loss
-    supervised_loss = CrossEntropy2d(ignore_label=ignore_label)#.cuda()
+    supervised_loss = CrossEntropy2d(ignore_label=ignore_label)  # .cuda()
 
     ''' Deeplab model '''
     # Define network
@@ -477,9 +477,9 @@ def main():
 
     ema_model = create_ema_model(model, Res_Deeplab)
     ema_model.train()
-    ema_model = ema_model#.cuda()
+    ema_model = ema_model  # .cuda()
     model.train()
-    model = model#.cuda()
+    model = model  # .cuda()
     cudnn.benchmark = True
 
     if not os.path.exists(checkpoint_dir):
@@ -518,8 +518,8 @@ def main():
             batch = next(trainloader_iter)
 
         images, labels, _, _, _ = batch
-        images = images#.cuda()
-        labels = labels#.cuda()
+        images = images  # .cuda()
+        labels = labels  # .cuda()
 
         ''' UNLABELED SAMPLES '''
         try:
@@ -532,7 +532,7 @@ def main():
 
         # Unlabeled
         unlabeled_images, _, _, _, _ = batch_remain
-        unlabeled_images = unlabeled_images#.cuda()
+        unlabeled_images = unlabeled_images  # .cuda()
 
         # Create pseudolabels
         with torch.no_grad():
@@ -591,10 +591,10 @@ def main():
         labeled_pred = interp(labeled_pred)
 
         # apply class balance for cityspcaes dataset
-        class_weights = torch.from_numpy(np.ones((num_classes)))#.cuda()
+        class_weights = torch.from_numpy(np.ones((num_classes)))  # .cuda()
         if i_iter > RAMP_UP_ITERS and dataset == 'cityscapes':
             class_weights = torch.from_numpy(
-                class_weights_curr.get_weights(num_iterations, only_labeled=False))#.cuda()
+                class_weights_curr.get_weights(num_iterations, only_labeled=False))  # .cuda()
 
         loss = 0
 
@@ -604,17 +604,17 @@ def main():
 
         # SELF-SUPERVISED SEGMENTATION
         unlabeled_loss = CrossEntropyLoss2dPixelWiseWeighted(ignore_index=ignore_label,
-                                                             weight=class_weights.float())#.cuda()  #
+                                                             weight=class_weights.float())  # .cuda()  #
 
         # Pseudo-label weightingRS))
         try:
-            x = torch.ones(joined_maxprobs.shape)#.cuda()
+            x = torch.ones(joined_maxprobs.shape)  # .cuda()
         except Exception as e:
             print("i_iter: ", i_iter)
             print("joined_maxprobs shape: ", joined_maxprobs.shape)
             raise e
 
-        pixelWiseWeight = sigmoid_ramp_up(i_iter, RAMP_UP_ITERS) * torch.ones(joined_maxprobs.shape)#.cuda()
+        pixelWiseWeight = sigmoid_ramp_up(i_iter, RAMP_UP_ITERS) * torch.ones(joined_maxprobs.shape)  # .cuda()
         pixelWiseWeight = pixelWiseWeight * torch.pow(joined_maxprobs.detach(), 6)
 
         # Pseudo-label loss
@@ -768,17 +768,18 @@ def main():
                 model.load_state_dict(checkpoint['model'])
                 ema_model = create_ema_model(model, Res_Deeplab)
                 ema_model.train()
-                ema_model = ema_model#.cuda()
+                ema_model = ema_model  # .cuda()
                 model.train()
-                model = model#.cuda()
+                model = model  # .cuda()
                 iters_without_improve = 0  # reset timer
 
     _save_checkpoint(num_iterations, model, optimizer, config)
 
     # FINISH TRAINING, evaluate again
     model.eval()
-    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,
-                               pretraining=pretraining)
+    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label,
+                               save_dir=checkpoint_dir, pretraining=pretraining,
+                               city=city, num_classes=num_classes)
     model.train()
 
     if mIoU > best_mIoU and save_best_model:
@@ -790,12 +791,13 @@ def main():
     # Load best model
     checkpoint = torch.load(os.path.join(checkpoint_dir, f'best_model.pth'))
     model.load_state_dict(checkpoint['model'])
-    model = model#.cuda()
+    model = model  # .cuda()
 
     model = update_BN_weak_unlabeled_data(model, normalize, batch_size_unlabeled, trainloader_remain)
     model.eval()
-    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, save_dir=checkpoint_dir,
-                               pretraining=pretraining)
+    mIoU, eval_loss = evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label,
+                               save_dir=checkpoint_dir, pretraining=pretraining,
+                               city=city, num_classes=num_classes)
     if mIoU > best_mIoU and save_best_model:
         best_mIoU = mIoU
         _save_checkpoint(i_iter, model, optimizer, config, save_best=True)

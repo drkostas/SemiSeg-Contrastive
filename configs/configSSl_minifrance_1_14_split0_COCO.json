@@ -8,7 +8,7 @@
     "num_workers": 3,
     "optimizer": "SGD",
     "momentum": 0.9,
-    "num_iterations": 150000,
+    "num_iterations": 150,
     "learning_rate": 2e-4,
     "lr_schedule": "Poly",
     "pretraining": "COCO",
@@ -24,9 +24,9 @@
   "seed": 5555,
   "ignore_label": 250,
   "utils": {
-    "save_checkpoint_every": 200000,
+    "save_checkpoint_every": 200,
     "checkpoint_dir": "/data/datasets/DFC2022/checkpoints/Deeplabv3",
-    "val_per_iter": 1,
+    "val_per_iter": 10,
     "save_best_model": true
   }
 }
