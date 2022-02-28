@@ -79,7 +79,7 @@ def get_iou(confM, dataset):
 
 def evaluate(model, dataset, deeplabv2=True, ignore_label=250, save_dir=None, pretraining='COCO',
              city='Nice', num_classes=None):
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+    # os.environ["CUDA_VISIBLE_DEVICES"] = ""
     print("------------- Evaluating -------------")
     print("Dataset: ", dataset)
     print("Deeplabv2: ", deeplabv2)
