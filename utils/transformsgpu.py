@@ -27,7 +27,7 @@ def normalize_rgb(data, dataset):
     else:
         mean = (127.5, 127.5, 127.5 )
 
-    mean = torch.Tensor(mean).unsqueeze(0).unsqueeze(2).unsqueeze(3)#.cuda()
+    mean = torch.Tensor(mean).unsqueeze(0).unsqueeze(2).unsqueeze(3).cuda()
     data_norm = ((data-mean)/255.0)
     return data_norm
 
@@ -50,7 +50,7 @@ def normalize_bgr(data, dataset):
     else:
         mean = (127.5, 127.5, 127.5 )
 
-    mean = torch.Tensor(mean).unsqueeze(0).unsqueeze(2).unsqueeze(3)#.cuda()
+    mean = torch.Tensor(mean).unsqueeze(0).unsqueeze(2).unsqueeze(3).cuda()
     data_norm = ((data-mean)/255.0)
     return data_norm
 
@@ -158,7 +158,7 @@ def solarize(solarize,  data = None, target = None, probs = None):
     if not (data is None):
         if solarize and data.shape[1]==3:
             seq = nn.Sequential(kornia.augmentation.RandomSolarize((0, 1)))
-            data = seq(data.cpu()/255.)*255.#.cuda()*255.
+            data = seq(data.cpu()/255.).cuda()*255.
     return data, target, probs
 
 

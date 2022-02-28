@@ -142,12 +142,12 @@ def evaluate(model, dataset, deeplabv2=True, ignore_label=250, save_dir=None, pr
         with torch.no_grad():
             interp = torch.nn.Upsample(size=(label.shape[1], label.shape[2]),
                                        mode='bilinear', align_corners=True)
-            # output = model(normalize(Variable(image).cuda(), dataset))
-            output = model(normalize(Variable(image), dataset))
+            output = model(normalize(Variable(image).cuda(), dataset))
+            # output = model(normalize(Variable(image), dataset))
             output = interp(output)
 
             try:
-                label_cuda = Variable(label.long())  # .cuda()
+                label_cuda = Variable(label.long()).cuda()
             except Exception as e:
                 print("------- label_cuda Error -------")
                 print("Index: ", index)
@@ -158,7 +158,7 @@ def evaluate(model, dataset, deeplabv2=True, ignore_label=250, save_dir=None, pr
                 print("LABEL SHAPE: ", label.shape)
                 raise e
             try:
-                criterion = CrossEntropy2d(ignore_label=ignore_label)  # .cuda()
+                criterion = CrossEntropy2d(ignore_label=ignore_label).cuda()
             except Exception as e:
                 print("------- criterion Error -------")
                 print("Index: ", index)
@@ -245,7 +245,7 @@ def main():
     checkpoint = torch.load(args.model_path)
     model.load_state_dict(checkpoint['model'])
 
-    model = model  # .cuda()
+    model = model.cuda()
     model.eval()
 
     evaluate(model, dataset, deeplabv2=deeplabv2, ignore_label=ignore_label, pretraining=pretraining)
